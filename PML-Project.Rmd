@@ -1,0 +1,231 @@
+---
+title: "Practical Machine Learning-Project"
+author: "Navneet"
+date: "October 25, 2015"
+output: html_document
+---
+
+##Background##
+
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+##Data## 
+
+The training data for this project are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment. 
+
+##Goal##
+
+The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set.
+
+### Set Working Directory###
+
+```{r}
+setwd("D:\\Documents\\Downloads\\PML\\Project")
+
+```
+
+### Load Libraries###
+
+```{r}
+library(ggplot2)
+library(caret)
+library(randomForest)
+library(plyr)
+
+
+```
+
+### Load Data ###
+
+```{r}
+trainingData <- read.csv("pml-training.csv")
+testingData <- read.csv("pml-testing.csv")
+
+```
+
+### Initial Data Review###
+
+```{r}
+nrow(trainingData)
+ncol(trainingData)
+
+nrow(testingData)
+ncol(testingData)
+
+```
+
+```{r}
+str(trainingData)
+str(testingData)
+```
+
+The training dataset has `r nrow(trainingData)` rows and `r ncol(trainingData)` columns
+
+The testing  dataset has `r nrow(testingData)` rows and `r ncol(testingData)` columns
+
+
+
+###Set Seed### 
+
+```{r}
+set.seed(1234)
+```
+
+###Data Partitioning###
+#### Use 60% data for training and 40% for testing####
+
+```{r}
+train<-createDataPartition(trainingData$classe, p=0.6, list=FALSE)
+myTraining<-trainingData[train,]
+myTesting<-trainingData[-train,]
+
+
+
+```
+
+
+### Data Cleaning###
+
+####Removing first 7 columns as they represent the participants and should not be part of the prediction model
+
+```{r}
+remColumns<- 1:7
+
+cleanedTraining<-myTraining[,-remColumns]
+cleanedTesting<-myTesting[,-remColumns]
+
+```
+
+Dimensions of cleaned training data after removing first 7 columns are `r dim(cleanedTraining) `
+Dimensions of cleaned testing  after removing first 7 columns are `r dim(cleanedTesting) `
+
+
+####Remove near zero variance columns
+```{r}
+
+nzvData<-nearZeroVar(cleanedTraining, saveMetrics=TRUE)
+cleanedTraining<-cleanedTraining[,!nzvData$nzv]
+dim(cleanedTraining)
+
+nzvData<-nearZeroVar(cleanedTesting, saveMetrics=TRUE)
+cleanedTesting<-cleanedTesting[,!nzvData$nzv]
+dim(cleanedTesting)
+
+```
+
+Dimensions of cleaned training data after removing near zero variance columns are `r dim(cleanedTraining) `
+Dimensions of cleaned testing data after removing near zero variance columns are `r dim(cleanedTesting) `
+
+
+
+#### Remove columns which have more than 80% missing data
+```{r}
+
+cleanedTraining[cleanedTraining==""] <- NA
+NAData <- apply(cleanedTraining, 2, function(x) sum(is.na(x)))/nrow(cleanedTraining)
+cleanedTraining <- cleanedTraining[!(NAData>0.8)]
+
+
+cleanedTesting[cleanedTesting==""] <- NA
+NAData <- apply(cleanedTesting, 2, function(x) sum(is.na(x)))/nrow(cleanedTesting)
+cleanedTesting <- cleanedTesting[!(NAData>0.8)]
+
+```
+Dimensions of cleaned training data after removing columns with more than 80% missing values are `r dim(cleanedTraining) `
+Dimensions of cleaned testing data after removing columns with more than 80% missing values are `r dim(cleanedTesting) `
+
+
+####Apply Machine Learning algorithms ####
+
+###Apply PCA ###
+```{r}
+
+preProcessing <- preProcess(cleanedTraining[,1:52],method="pca",thresh=.8) 
+preProcessing
+
+preProcessing
+
+preProcessing <- preProcess(cleanedTraining[,1:52],method="pca",thresh=.95) 
+preProcessing
+
+preProcessing <- preProcess(cleanedTraining[,1:52],method="pca",pcaComp=25) 
+preProcessing$rotation
+trainingDataPCA <- predict(preProcessing,cleanedTraining[,1:52])
+
+
+```
+
+###USe Random Forest ###
+
+```{r}
+
+modFitRF <- randomForest(cleanedTraining$classe ~ .,   data=trainingDataPCA, do.trace=F)
+modFitRF
+
+
+
+```
+
+### Apply PCA to test data###
+```{r}
+testingPCAData <- predict(preProcessing,cleanedTesting[,1:52])
+
+
+
+```
+
+
+<!-- confusionMatrix(cleanedTesting$classe,predict(modFitRF,testingPCAData)) -->
+
+### Apply RF to PCA test data###
+```{r}
+
+predictTestingRF<- predict(modFitRF,testingPCAData)
+
+confusionMatrix(cleanedTesting$classe,predictTestingRF)
+
+
+```
+
+
+### Predict classes of 20 test data ###
+```{r}
+
+testingData<-testingData[,-remColumns]
+nzvData<-nearZeroVar(testingData, saveMetrics=TRUE)
+testingData<-testingData[,!nzvData$nzv]
+testingData[testingData==""] <- NA
+NAData <- apply(testingData, 2, function(x) sum(is.na(x)))/nrow(testingData)
+testingData <- testingData[!(NAData>0.8)]
+
+
+testdataPC <- predict(preProcessing,testingData[,1:52])
+testingData$classe <- predict(modFitRF,testdataPC)
+testingData$classe
+
+x<-testingData$classe
+
+n = length(x)
+for(i in 1:n)
+{
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+}
+
+```
+
+### Discussion###
+In this machine learning analysis, original data had 19622 observations of 160 variables. 60% data was used for training purpose and 40% of the data for testing. First seven columns and Columns containg more than 80% of null values and having close to zero variance were removed and the remaining columns left were 53. PCA analysis showed that , 25 components were required to explain 95% of the variance.
+After this Random Forest algorithm was applied and it had 97% of the accuracy, Applying the model on testing data achieved 100% of the accuracy.
+
+###Reference###
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har.
